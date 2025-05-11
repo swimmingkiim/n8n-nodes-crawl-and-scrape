@@ -38,8 +38,7 @@
   ],
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": [
-    ],
+    "credentials": [],
     "nodes": [
       "dist/nodes/CrawleeNode/CrawleeNode.node.js"
     ]
@@ -56,7 +55,7 @@
     "n8n-workflow": "*"
   },
   "dependencies": {
-    "cheerio": "^1.0.0",
+    "cheerio": "^1.0.0-rc.12",
     "crawlee": "^3.13.3"
   }
 }

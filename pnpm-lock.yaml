@@ -9,13 +9,13 @@ importers:
   .:
     dependencies:
       cheerio:
-        specifier: ^1.0.0
+        specifier: ^1.0.0-rc.12
         version: 1.0.0
       crawlee:
         specifier: ^3.13.3
         version: 3.13.3
       n8n-workflow:
-        specifier: ^0.107.0
+        specifier: '*'
         version: 0.107.0
     devDependencies:
       '@typescript-eslint/parser':
