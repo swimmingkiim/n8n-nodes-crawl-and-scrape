@@ -6,7 +6,6 @@ import type {
 } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 import { CheerioCrawler } from 'crawlee';
-import cheerio from 'cheerio';
 
 export class CrawleeNode implements INodeType {
 	description: INodeTypeDescription = {
