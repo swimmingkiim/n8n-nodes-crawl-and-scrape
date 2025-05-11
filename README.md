@@ -1,7 +1,8 @@
-# n8n-nodes-crawlee
+# n8n-nodes-crawl-and-scrape
 
-This is an n8n community node. It lets you use Crawlee in your n8n workflows.
+This is an n8n community node. It lets you use crawl and scrape websites in your n8n workflows.
 
+I used [crawlee](https://github.com/apify/crawlee) for this project.
 Crawlee is a powerful web scraping and crawling library that helps you extract data from websites efficiently and reliably.
 
 [n8n](https://n8n.io/) is a [fair-code licensed](https://docs.n8n.io/reference/license/) workflow automation platform.
