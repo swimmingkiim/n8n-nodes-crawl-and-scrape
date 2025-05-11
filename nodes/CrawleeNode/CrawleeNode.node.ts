@@ -16,14 +16,14 @@ function appendTimestampToUrl(url: string): string {
 
 export class CrawleeNode implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Crawlee',
+		displayName: 'Crawl and Scrape',
 		name: 'crawleeNode',
-		icon: 'file:crawlee-logo.svg',
+		icon: 'file:crawl-and-scrape-logo.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Crawl websites and extract data',
 		defaults: {
-			name: 'Crawlee',
+			name: 'Crawl and Scrape',
 		},
 		inputs: ['main'],
 		outputs: ['main'],
