@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-crawlee",
   "version": "0.1.0",
-  "description": "",
+  "description": "n8n custom node to crawl and scrape website with crawlee",
   "keywords": [
     "n8n-community-node-package",
     "n8n",
