@@ -33,9 +33,7 @@
     "lintfix": "eslint nodes package.json --fix",
     "prepublishOnly": "pnpm build && pnpm lint -c .eslintrc.prepublish.js nodes package.json"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist", "nodes", "package.json", "LICENSE", "README.md"],
   "n8n": {
     "n8nNodesApiVersion": 1,
     "credentials": [],
