@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Web -->
+  <path d="M12 12c-1.5-1.5-3-3-5.5-3S2 10 2 12s1.5 4.5 4.5 4.5S12 13.5 12 12z" />
+  <path d="M12 12c1.5-1.5 3-3 5.5-3S22 10 22 12s-1.5 4.5-4.5 4.5S12 13.5 12 12z" />
+  <path d="M12 12c-1.5 1.5-3 3-5.5 3S2 14 2 12s1.5-4.5 4.5-4.5S12 10.5 12 12z" />
+  <path d="M12 12c1.5 1.5 3 3 5.5 3S22 14 22 12s-1.5-4.5-4.5-4.5S12 10.5 12 12z" />
+
+  <!-- Spider -->
+  <g transform="translate(8, 8) scale(0.35)">
+    <circle cx="12" cy="12" r="4" fill="currentColor" />
+    <path d="M4 4l4 4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M20 4l-4 4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M4 20l4-4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M20 20l-4-4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M2 12h4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M18 12h4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M12 2v4" stroke="currentColor" stroke-width="2.5" />
+    <path d="M12 18v4" stroke="currentColor" stroke-width="2.5" />
+  </g>
+</svg>
