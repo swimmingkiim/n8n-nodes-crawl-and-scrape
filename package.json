@@ -8,7 +8,7 @@
     "web crawler",
     "scraping"
   ],
-  "license": "Apache-2.0",
+  "license": "MIT",
   "homepage": "https://github.com/swimmingkiim/n8n-nodes-crawlee",
   "author": {
     "name": "swimmingkiim",
@@ -28,10 +28,10 @@
     "preinstall": "npx only-allow pnpm",
     "build": "tsc && gulp build:icons",
     "dev": "tsc --watch",
-    "format": "prettier nodes credentials --write",
-    "lint": "eslint nodes credentials package.json",
-    "lintfix": "eslint nodes credentials package.json --fix",
-    "prepublishOnly": "pnpm build && pnpm lint -c .eslintrc.prepublish.js nodes credentials package.json"
+    "format": "prettier nodes --write",
+    "lint": "eslint nodes package.json",
+    "lintfix": "eslint nodes package.json --fix",
+    "prepublishOnly": "pnpm build && pnpm lint -c .eslintrc.prepublish.js nodes package.json"
   },
   "files": [
     "dist"
