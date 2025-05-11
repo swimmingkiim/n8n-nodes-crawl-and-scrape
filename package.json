@@ -26,7 +26,7 @@
   "main": "index.js",
   "scripts": {
     "preinstall": "npx only-allow pnpm",
-    "build": "tsc && gulp build:icons",
+    "build": "rm -rf dist && tsc && gulp build:icons",
     "dev": "tsc --watch",
     "format": "prettier nodes --write",
     "lint": "eslint nodes package.json",
