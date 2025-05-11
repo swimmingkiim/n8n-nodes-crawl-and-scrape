@@ -9,10 +9,16 @@ import type {
 } from 'n8n-workflow';
 import { CheerioCrawler } from 'crawlee';
 
+function appendTimestampToUrl(url: string): string {
+	const separator = url.includes('?') ? '&' : '?';
+	return `${url}${separator}_=${Date.now()}`;
+}
+
 export class CrawleeNode implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Crawlee',
 		name: 'crawleeNode',
+		icon: 'file:crawlee-logo.svg',
 		group: ['transform'],
 		version: 1,
 		description: 'Crawl websites and extract data',
@@ -84,9 +90,12 @@ export class CrawleeNode implements INodeType {
 
 				if (operation === 'extractLinks') {
 					const crawledData: any[] = [];
+					const originalUrl = url;
 
 					const crawler = new CheerioCrawler({
 						maxRequestsPerCrawl: 100,
+						requestHandlerTimeoutSecs: 30,
+						useSessionPool: false,
 						async requestHandler({ request, $, log }) {
 							log.debug(`Crawling ${request.url}`);
 
@@ -103,26 +112,29 @@ export class CrawleeNode implements INodeType {
 							});
 
 							crawledData.push({
-								url: request.url,
+								url: originalUrl,
 								links,
 							});
 						},
 					});
 
-					await crawler.run([url]);
+					await crawler.run([appendTimestampToUrl(url)]);
 					const uniqueLinks = [...new Set(crawledData.flatMap(item => item.links))];
 					returnData.push({
 						json: {
 							status: 'success',
 							message: 'Crawling finished',
 							data: {
-								url,
+								url: originalUrl,
 								links: uniqueLinks,
 							},
 						},
 					});
 				} else if (operation === 'extractText') {
+					const originalUrl = url;
 					const crawler = new CheerioCrawler({
+						requestHandlerTimeoutSecs: 30,
+						useSessionPool: false,
 						async requestHandler({ request, $, log }) {
 							log.debug(`Extracting text from ${request.url}`);
 
@@ -132,7 +144,7 @@ export class CrawleeNode implements INodeType {
 									status: 'success',
 									message: 'Text extraction finished',
 									data: {
-										url: request.url,
+										url: originalUrl,
 										text,
 									},
 								},
@@ -140,9 +152,12 @@ export class CrawleeNode implements INodeType {
 						},
 					});
 
-					await crawler.run([url]);
+					await crawler.run([appendTimestampToUrl(url)]);
 				} else if (operation === 'extractHtml') {
+					const originalUrl = url;
 					const crawler = new CheerioCrawler({
+						requestHandlerTimeoutSecs: 30,
+						useSessionPool: false,
 						async requestHandler({ request, body, log }) {
 							log.debug(`Extracting HTML from ${request.url}`);
 
@@ -151,7 +166,7 @@ export class CrawleeNode implements INodeType {
 									status: 'success',
 									message: 'HTML extraction finished',
 									data: {
-										url: request.url,
+										url: originalUrl,
 										html: body,
 									},
 								},
@@ -159,7 +174,7 @@ export class CrawleeNode implements INodeType {
 						},
 					});
 
-					await crawler.run([url]);
+					await crawler.run([appendTimestampToUrl(url)]);
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
