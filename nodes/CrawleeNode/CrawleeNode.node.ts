@@ -1,10 +1,12 @@
+import {
+	NodeOperationError,
+} from 'n8n-workflow';
 import type {
 	IExecuteFunctions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { NodeOperationError } from 'n8n-workflow';
 import { CheerioCrawler } from 'crawlee';
 
 export class CrawleeNode implements INodeType {
