@@ -139,6 +139,9 @@ export class CrawleeNode implements INodeType {
 							log.debug(`Extracting text from ${request.url}`);
 
 							const text = $('body').text().trim();
+							const title = $('title').text() || null;
+							const description = $('meta[name="description"]').attr('content') || null;
+							
 							returnData.push({
 								json: {
 									status: 'success',
@@ -146,6 +149,8 @@ export class CrawleeNode implements INodeType {
 									data: {
 										url: originalUrl,
 										text,
+										title,
+										description,
 									},
 								},
 							});
@@ -160,6 +165,8 @@ export class CrawleeNode implements INodeType {
 						useSessionPool: false,
 						async requestHandler({ request, body, log }) {
 							log.debug(`Extracting HTML from ${request.url}`);
+							const title = $('title').text() || null;
+							const description = $('meta[name="description"]').attr('content') || null;
 
 							returnData.push({
 								json: {
@@ -168,6 +175,8 @@ export class CrawleeNode implements INodeType {
 									data: {
 										url: originalUrl,
 										html: body,
+										title: title,
+										description: description,
 									},
 								},
 							});
