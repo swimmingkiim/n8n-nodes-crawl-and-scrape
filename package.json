@@ -1,59 +1,66 @@
 {
-  "name": "n8n-nodes-crawl-and-scrape",
-  "version": "0.1.0",
-  "description": "n8n custom node to crawl and scrape website",
-  "keywords": [
-    "n8n-community-node-package",
-    "n8n",
-    "web crawler",
-    "scraping"
-  ],
-  "license": "MIT",
-  "homepage": "https://github.com/swimmingkiim/n8n-nodes-crawlee",
-  "author": {
-    "name": "swimmingkiim",
-    "email": "swimmingkiim@gmail.com"
-  },
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/swimmingkiim/n8n-nodes-crawlee"
-  },
-  "engines": {
-    "node": ">=18.10",
-    "pnpm": ">=9.1"
-  },
-  "packageManager": "pnpm@9.1.4",
-  "main": "index.js",
-  "scripts": {
-    "preinstall": "npx only-allow pnpm",
-    "build": "rm -rf dist && tsc && gulp build:icons",
-    "dev": "tsc --watch",
-    "format": "prettier nodes --write",
-    "lint": "eslint nodes package.json",
-    "lintfix": "eslint nodes package.json --fix",
-    "prepublishOnly": "pnpm build && pnpm lint -c .eslintrc.prepublish.js nodes package.json"
-  },
-  "files": ["dist", "nodes", "package.json", "LICENSE", "README.md"],
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "credentials": [],
-    "nodes": [
-      "dist/nodes/CrawleeNode/CrawleeNode.node.js"
-    ]
-  },
-  "devDependencies": {
-    "@typescript-eslint/parser": "^7.15.0",
-    "eslint": "^8.56.0",
-    "eslint-plugin-n8n-nodes-base": "^1.16.1",
-    "gulp": "^4.0.2",
-    "prettier": "^3.3.2",
-    "typescript": "^5.5.3"
-  },
-  "peerDependencies": {
-    "n8n-workflow": "*"
-  },
-  "dependencies": {
-    "cheerio": "^1.0.0-rc.12",
-    "crawlee": "^3.13.3"
-  }
+	"name": "n8n-nodes-crawl-and-scrape",
+	"version": "0.1.0",
+	"description": "n8n custom node to crawl and scrape website",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"web crawler",
+		"scraping"
+	],
+	"license": "MIT",
+	"homepage": "https://github.com/swimmingkiim/n8n-nodes-crawlee",
+	"author": {
+		"name": "swimmingkiim",
+		"email": "swimmingkiim@gmail.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/swimmingkiim/n8n-nodes-crawlee"
+	},
+	"engines": {
+		"node": ">=18.10",
+		"pnpm": ">=9.1"
+	},
+	"packageManager": "pnpm@10.20.0",
+	"main": "index.js",
+	"scripts": {
+		"preinstall": "npx only-allow pnpm",
+		"build": "rm -rf dist && tsc && gulp build:icons",
+		"dev": "tsc --watch",
+		"format": "prettier nodes --write",
+		"lint": "eslint nodes package.json",
+		"lintfix": "eslint nodes package.json --fix",
+		"prepublishOnly": "pnpm build && pnpm lint -c .eslintrc.prepublish.js nodes package.json",
+		"test:local": "pnpm install && pnpm build && mkdir -p ~/.n8n/custom && (cd ~/.n8n/custom && pnpm install && pnpm unlink n8n-nodes-crawlee &> /dev/null ; pnpm link $INIT_CWD)"
+	},
+	"files": [
+		"dist",
+		"nodes",
+		"package.json",
+		"LICENSE",
+		"README.md"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"credentials": [],
+		"nodes": [
+			"dist/nodes/CrawleeNode/CrawleeNode.node.js"
+		]
+	},
+	"devDependencies": {
+		"@typescript-eslint/parser": "^7.15.0",
+		"eslint": "^8.56.0",
+		"eslint-plugin-n8n-nodes-base": "^1.16.1",
+		"gulp": "^4.0.2",
+		"prettier": "^3.3.2",
+		"typescript": "^5.5.3"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	},
+	"dependencies": {
+		"cheerio": "^1.0.0-rc.12",
+		"crawlee": "^3.13.3"
+	}
 }

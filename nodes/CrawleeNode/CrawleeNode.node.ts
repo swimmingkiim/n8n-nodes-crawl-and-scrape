@@ -1,13 +1,11 @@
-import {
-	NodeOperationError,
-} from 'n8n-workflow';
+import { NodeOperationError } from 'n8n-workflow';
 import type {
 	IExecuteFunctions,
 	INodeExecutionData,
 	INodeType,
 	INodeTypeDescription,
 } from 'n8n-workflow';
-import { CheerioCrawler } from 'crawlee';
+import { CheerioCrawler, ProxyConfiguration } from 'crawlee';
 import * as cheerio from 'cheerio';
 
 function appendTimestampToUrl(url: string): string {
@@ -77,6 +75,22 @@ export class CrawleeNode implements INodeType {
 				},
 				description: 'Maximum depth of crawling',
 			},
+			{
+				displayName: 'Proxy URLs',
+				name: 'proxyUrls',
+				type: 'string',
+				default: '',
+				typeOptions: {
+					rows: 4,
+				},
+				displayOptions: {
+					show: {
+						operation: ['extractLinks', 'extractText', 'extractHtml'],
+					},
+				},
+				description:
+					'A list of proxy URLs to use, one per line. For example: http://user:password@proxy.example.com:8080.',
+			},
 		],
 	};
 
@@ -88,12 +102,23 @@ export class CrawleeNode implements INodeType {
 			try {
 				const url = this.getNodeParameter('url', itemIndex, '') as string;
 				const operation = this.getNodeParameter('operation', itemIndex, '') as string;
+				const proxyUrlsRaw = this.getNodeParameter('proxyUrls', itemIndex, '') as string;
+				const proxyUrls = proxyUrlsRaw
+					.split('\n')
+					.map((url) => url.trim())
+					.filter((url) => url);
+
+				let proxyConfiguration: ProxyConfiguration | undefined;
+				if (proxyUrls.length > 0) {
+					proxyConfiguration = new ProxyConfiguration({ proxyUrls });
+				}
 
 				if (operation === 'extractLinks') {
 					const crawledData: any[] = [];
 					const originalUrl = url;
 
 					const crawler = new CheerioCrawler({
+						proxyConfiguration,
 						maxRequestsPerCrawl: 100,
 						requestHandlerTimeoutSecs: 30,
 						useSessionPool: false,
@@ -120,7 +145,7 @@ export class CrawleeNode implements INodeType {
 					});
 
 					await crawler.run([appendTimestampToUrl(url)]);
-					const uniqueLinks = [...new Set(crawledData.flatMap(item => item.links))];
+					const uniqueLinks = [...new Set(crawledData.flatMap((item) => item.links))];
 					returnData.push({
 						json: {
 							status: 'success',
@@ -134,6 +159,7 @@ export class CrawleeNode implements INodeType {
 				} else if (operation === 'extractText') {
 					const originalUrl = url;
 					const crawler = new CheerioCrawler({
+						proxyConfiguration,
 						requestHandlerTimeoutSecs: 30,
 						useSessionPool: false,
 						async requestHandler({ request, $, log }) {
@@ -142,7 +168,7 @@ export class CrawleeNode implements INodeType {
 							const text = $('body').text().trim();
 							const title = $('title').text() || null;
 							const description = $('meta[name="description"]').attr('content') || null;
-							
+
 							returnData.push({
 								json: {
 									status: 'success',
@@ -162,6 +188,7 @@ export class CrawleeNode implements INodeType {
 				} else if (operation === 'extractHtml') {
 					const originalUrl = url;
 					const crawler = new CheerioCrawler({
+						proxyConfiguration,
 						requestHandlerTimeoutSecs: 30,
 						useSessionPool: false,
 						async requestHandler({ request, body, log }) {
