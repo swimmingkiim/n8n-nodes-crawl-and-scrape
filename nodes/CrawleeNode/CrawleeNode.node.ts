@@ -8,6 +8,7 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { CheerioCrawler } from 'crawlee';
+import * as cheerio from 'cheerio';
 
 function appendTimestampToUrl(url: string): string {
 	const separator = url.includes('?') ? '&' : '?';
@@ -165,6 +166,7 @@ export class CrawleeNode implements INodeType {
 						useSessionPool: false,
 						async requestHandler({ request, body, log }) {
 							log.debug(`Extracting HTML from ${request.url}`);
+							const $ = cheerio.load(body.toString());
 							const title = $('title').text() || null;
 							const description = $('meta[name="description"]').attr('content') || null;
 
