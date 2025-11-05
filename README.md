@@ -12,7 +12,7 @@ Crawlee is a powerful web scraping and crawling library that helps you extract d
 [Credentials](#credentials)  
 [Compatibility](#compatibility)  
 [Resources](#resources)  
-[Version history](#version-history)  
+[Version history](#version-history)
 
 ## Installation
 
@@ -36,16 +36,20 @@ This node is compatible with n8n version 1.0.0 and above.
 
 ## Resources
 
-* [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
-* [Crawlee Documentation](https://crawlee.dev/)
+- [n8n community nodes documentation](https://docs.n8n.io/integrations/community-nodes/)
+- [Crawlee Documentation](https://crawlee.dev/)
 
 ## Version history
 
 ### 0.1.0
+
 - Initial release
 - Added support for basic web scraping operations:
   - Extract Links
   - Extract Text
   - Extract HTML
 
+### 0.1.2
 
+- Add proxy feature
+- Update crawlee version
