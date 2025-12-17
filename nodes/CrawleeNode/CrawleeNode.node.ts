@@ -293,41 +293,42 @@ export class CrawleeNode implements INodeType {
 					proxyConfiguration = new ProxyConfiguration({ proxyUrls });
 				}
 
+				const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
+					const processedHeaders = { ...headers };
+					const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
+					if (cookieKey) {
+						const rawCookie = processedHeaders[cookieKey];
+						const extractedCookies = rawCookie
+							.split(';')
+							.map((c) => c.trim())
+							.filter((c) => c)
+							.reduce((acc, curr) => {
+								const separatorIndex = curr.indexOf('=');
+								if (separatorIndex === -1) return acc;
+								const key = curr.slice(0, separatorIndex);
+								const value = curr.slice(separatorIndex + 1);
+								acc[key] = value;
+								return acc;
+							}, {} as Record<string, string>);
+						Object.assign(cookies, extractedCookies);
+						delete processedHeaders[cookieKey];
+					}
+
+					// Remove accept-encoding to let the browser/client handle decompression
+					const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
+					if (encodingKey) {
+						delete processedHeaders[encodingKey];
+					}
+
+					return processedHeaders;
+				};
+
 				if (operation === 'extractLinks') {
 					const crawledData: any[] = [];
 					const originalUrl = url;
 
 
-					// Helper to process headers and move 'cookie' to cookiesObj
-					const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
-						const processedHeaders = { ...headers };
-						const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
-						if (cookieKey) {
-							const rawCookie = processedHeaders[cookieKey];
-							const extractedCookies = rawCookie
-								.split(';')
-								.map((c) => c.trim())
-								.filter((c) => c)
-								.reduce((acc, curr) => {
-									const separatorIndex = curr.indexOf('=');
-									if (separatorIndex === -1) return acc;
-									const key = curr.slice(0, separatorIndex);
-									const value = curr.slice(separatorIndex + 1);
-									acc[key] = value;
-									return acc;
-								}, {} as Record<string, string>);
-							Object.assign(cookies, extractedCookies);
-							delete processedHeaders[cookieKey];
-						}
 
-						// Remove accept-encoding to let the browser/client handle decompression
-						const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
-						if (encodingKey) {
-							delete processedHeaders[encodingKey];
-						}
-
-						return processedHeaders;
-					};
 
 					if (useBrowser) {
 						const browserCrawler = new PlaywrightCrawler({
@@ -450,36 +451,7 @@ export class CrawleeNode implements INodeType {
 				} else if (operation === 'extractText') {
 					const originalUrl = url;
 
-					// Helper to process headers and move 'cookie' to cookiesObj
-					const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
-						const processedHeaders = { ...headers };
-						const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
-						if (cookieKey) {
-							const rawCookie = processedHeaders[cookieKey];
-							const extractedCookies = rawCookie
-								.split(';')
-								.map((c) => c.trim())
-								.filter((c) => c)
-								.reduce((acc, curr) => {
-									const separatorIndex = curr.indexOf('=');
-									if (separatorIndex === -1) return acc;
-									const key = curr.slice(0, separatorIndex);
-									const value = curr.slice(separatorIndex + 1);
-									acc[key] = value;
-									return acc;
-								}, {} as Record<string, string>);
-							Object.assign(cookies, extractedCookies);
-							delete processedHeaders[cookieKey];
-						}
 
-						// Remove accept-encoding to let the browser/client handle decompression
-						const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
-						if (encodingKey) {
-							delete processedHeaders[encodingKey];
-						}
-
-						return processedHeaders;
-					};
 
 					if (useBrowser) {
 						const browserCrawler = new PlaywrightCrawler({
@@ -587,36 +559,7 @@ export class CrawleeNode implements INodeType {
 				} else if (operation === 'extractHtml') {
 					const originalUrl = url;
 
-					// Helper to process headers and move 'cookie' to cookiesObj
-					const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
-						const processedHeaders = { ...headers };
-						const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
-						if (cookieKey) {
-							const rawCookie = processedHeaders[cookieKey];
-							const extractedCookies = rawCookie
-								.split(';')
-								.map((c) => c.trim())
-								.filter((c) => c)
-								.reduce((acc, curr) => {
-									const separatorIndex = curr.indexOf('=');
-									if (separatorIndex === -1) return acc;
-									const key = curr.slice(0, separatorIndex);
-									const value = curr.slice(separatorIndex + 1);
-									acc[key] = value;
-									return acc;
-								}, {} as Record<string, string>);
-							Object.assign(cookies, extractedCookies);
-							delete processedHeaders[cookieKey];
-						}
 
-						// Remove accept-encoding to let the browser/client handle decompression
-						const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
-						if (encodingKey) {
-							delete processedHeaders[encodingKey];
-						}
-
-						return processedHeaders;
-					};
 
 					if (useBrowser) {
 						const browserCrawler = new PlaywrightCrawler({
@@ -684,8 +627,10 @@ export class CrawleeNode implements INodeType {
 							useSessionPool: false,
 							preNavigationHooks: [
 								async ({ request, log }) => {
-									if (Object.keys(jsonHeaders).length > 0) {
-										request.headers = { ...request.headers, ...jsonHeaders };
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										request.headers = { ...request.headers, ...saneHeaders };
 									}
 									if (Object.keys(cookiesObj).length > 0) {
 										const cookieString = Object.entries(cookiesObj)

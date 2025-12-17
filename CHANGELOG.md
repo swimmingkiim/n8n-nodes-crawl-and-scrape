@@ -38,3 +38,8 @@
 - Fixed an issue where `extractText` and `extractHtml` would return raw JavaScript/anti-bot scripts instead of page content by improving the wait strategy.
 - Fixed an issue where AliExpress and other protected sites would show only footer content by implementing the User-Agent sync and header parsing logic.
 
+## [0.3.1] - 2025-12-17
+
+### Fixed
+- **Process Headers Logic**: Fixed a bug where `extractHtml` used with `Use Browser: Off` (Cheerio) was ignoring custom header processing logic (e.g. stripping `accept-encoding` and extracting cookies).
+- **Refactoring**: Centralized header processing logic to ensure consistent behavior across all operations and crawler types.
