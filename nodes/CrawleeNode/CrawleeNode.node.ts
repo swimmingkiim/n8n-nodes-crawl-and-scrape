@@ -99,11 +99,48 @@ export class CrawleeNode implements INodeType {
 				description: 'Whether to use a headless browser (Playwright) for crawling. Useful for sites that require JavaScript.',
 			},
 			{
-				displayName: 'Custom Headers',
+				displayName: 'Header Input Type',
+				name: 'headerInputType',
+				type: 'options',
+				options: [
+					{
+						name: 'JSON',
+						value: 'json',
+					},
+					{
+						name: 'Raw String',
+						value: 'string',
+					},
+				],
+				default: 'json',
+				description: 'How to provide headers: as a JSON object or a raw string',
+			},
+			{
+				displayName: 'Custom Headers (JSON)',
 				name: 'jsonHeaders',
 				type: 'json',
 				default: '{}',
+				displayOptions: {
+					show: {
+						headerInputType: ['json'],
+					},
+				},
 				description: 'JSON object of custom headers to send with requests',
+			},
+			{
+				displayName: 'Custom Headers (Raw String)',
+				name: 'rawHeaderString',
+				type: 'string',
+				default: '',
+				typeOptions: {
+					rows: 4,
+				},
+				displayOptions: {
+					show: {
+						headerInputType: ['string'],
+					},
+				},
+				description: 'Raw header string. Supports "Key: Value" format or alternating lines (Key on one line, Value on the next). Automatically strips quotes and ignores pseudo-headers (starting with :).',
 			},
 			{
 				displayName: 'Cookies Input Type',
@@ -162,10 +199,65 @@ export class CrawleeNode implements INodeType {
 				const operation = this.getNodeParameter('operation', itemIndex, '') as string;
 				const useBrowser = this.getNodeParameter('useBrowser', itemIndex, false) as boolean;
 				const proxyUrlsRaw = this.getNodeParameter('proxyUrls', itemIndex, '') as string;
-				const jsonHeaders = this.getNodeParameter('jsonHeaders', itemIndex, {}) as Record<
-					string,
-					string
-				>;
+
+				const headerInputType = this.getNodeParameter('headerInputType', itemIndex, 'json') as string;
+				let jsonHeaders: Record<string, string> = {};
+
+				const parseRawHeaders = (raw: string): Record<string, string> => {
+					const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
+					const headers: Record<string, string> = {};
+
+					// Strategy 1: Check for "Key: Value" lines
+					const hasColons = lines.some(l => l.includes(':'));
+
+					if (hasColons) {
+						for (const line of lines) {
+							const separatorIndex = line.indexOf(':');
+							if (separatorIndex === -1) continue;
+
+							let key = line.slice(0, separatorIndex).trim();
+							const value = line.slice(separatorIndex + 1).trim();
+
+							// Clean Key: remove quotes, internal spaces check
+							key = key.replace(/['"]/g, '');
+
+							// Header keys cannot contain spaces
+							if (key.includes(' ')) continue;
+
+							// Skip protocol headers and empty keys
+							if (key.startsWith(':') || !key) continue;
+
+							headers[key] = value;
+						}
+					} else {
+						// Strategy 2: Alternating lines (Key \n Value)
+						// This assumes even number of relevant lines or Key followed by Value
+						for (let i = 0; i < lines.length; i += 2) {
+							if (i + 1 >= lines.length) break;
+
+							let key = lines[i].trim();
+							const value = lines[i + 1].trim();
+
+							// Clean Key
+							key = key.replace(/['"]/g, '');
+
+							// Validation
+							if (key.includes(' ') || key.startsWith(':') || !key) continue;
+
+							headers[key] = value;
+						}
+					}
+					return headers;
+				};
+
+				if (headerInputType === 'json') {
+					jsonHeaders = this.getNodeParameter('jsonHeaders', itemIndex, {}) as Record<string, string>;
+				} else {
+					const rawHeaderString = this.getNodeParameter('rawHeaderString', itemIndex, '') as string;
+					if (rawHeaderString) {
+						jsonHeaders = parseRawHeaders(rawHeaderString);
+					}
+				}
 
 
 				const cookieInputType = this.getNodeParameter('cookieInputType', itemIndex, 'json') as string;
@@ -206,6 +298,37 @@ export class CrawleeNode implements INodeType {
 					const originalUrl = url;
 
 
+					// Helper to process headers and move 'cookie' to cookiesObj
+					const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
+						const processedHeaders = { ...headers };
+						const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
+						if (cookieKey) {
+							const rawCookie = processedHeaders[cookieKey];
+							const extractedCookies = rawCookie
+								.split(';')
+								.map((c) => c.trim())
+								.filter((c) => c)
+								.reduce((acc, curr) => {
+									const separatorIndex = curr.indexOf('=');
+									if (separatorIndex === -1) return acc;
+									const key = curr.slice(0, separatorIndex);
+									const value = curr.slice(separatorIndex + 1);
+									acc[key] = value;
+									return acc;
+								}, {} as Record<string, string>);
+							Object.assign(cookies, extractedCookies);
+							delete processedHeaders[cookieKey];
+						}
+
+						// Remove accept-encoding to let the browser/client handle decompression
+						const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
+						if (encodingKey) {
+							delete processedHeaders[encodingKey];
+						}
+
+						return processedHeaders;
+					};
+
 					if (useBrowser) {
 						const browserCrawler = new PlaywrightCrawler({
 							proxyConfiguration,
@@ -215,9 +338,24 @@ export class CrawleeNode implements INodeType {
 							headless: true,
 							preNavigationHooks: [
 								async ({ page }, gotoOptions) => {
-									if (Object.keys(jsonHeaders).length > 0) {
-										await page.setExtraHTTPHeaders(jsonHeaders);
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										await page.setExtraHTTPHeaders(saneHeaders);
+
+										// Sync navigator.userAgent with the User-Agent header if provided
+										const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+										if (uaKey) {
+											const userAgent = saneHeaders[uaKey];
+											await page.addInitScript((ua) => {
+												Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+											}, userAgent);
+										}
 									}
+
+									// Set realistic viewport
+									await page.setViewportSize({ width: 1920, height: 1080 });
+
 									if (Object.keys(cookiesObj).length > 0) {
 										const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
 											name,
@@ -261,8 +399,10 @@ export class CrawleeNode implements INodeType {
 							useSessionPool: false,
 							preNavigationHooks: [
 								async ({ request, log }) => {
-									if (Object.keys(jsonHeaders).length > 0) {
-										request.headers = { ...request.headers, ...jsonHeaders };
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										request.headers = { ...request.headers, ...saneHeaders };
 									}
 									if (Object.keys(cookiesObj).length > 0) {
 										const cookieString = Object.entries(cookiesObj)
@@ -310,6 +450,37 @@ export class CrawleeNode implements INodeType {
 				} else if (operation === 'extractText') {
 					const originalUrl = url;
 
+					// Helper to process headers and move 'cookie' to cookiesObj
+					const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
+						const processedHeaders = { ...headers };
+						const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
+						if (cookieKey) {
+							const rawCookie = processedHeaders[cookieKey];
+							const extractedCookies = rawCookie
+								.split(';')
+								.map((c) => c.trim())
+								.filter((c) => c)
+								.reduce((acc, curr) => {
+									const separatorIndex = curr.indexOf('=');
+									if (separatorIndex === -1) return acc;
+									const key = curr.slice(0, separatorIndex);
+									const value = curr.slice(separatorIndex + 1);
+									acc[key] = value;
+									return acc;
+								}, {} as Record<string, string>);
+							Object.assign(cookies, extractedCookies);
+							delete processedHeaders[cookieKey];
+						}
+
+						// Remove accept-encoding to let the browser/client handle decompression
+						const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
+						if (encodingKey) {
+							delete processedHeaders[encodingKey];
+						}
+
+						return processedHeaders;
+					};
+
 					if (useBrowser) {
 						const browserCrawler = new PlaywrightCrawler({
 							proxyConfiguration,
@@ -318,9 +489,24 @@ export class CrawleeNode implements INodeType {
 							headless: true,
 							preNavigationHooks: [
 								async ({ page }, gotoOptions) => {
-									if (Object.keys(jsonHeaders).length > 0) {
-										await page.setExtraHTTPHeaders(jsonHeaders);
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										await page.setExtraHTTPHeaders(saneHeaders);
+
+										// Sync navigator.userAgent with the User-Agent header if provided
+										const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+										if (uaKey) {
+											const userAgent = saneHeaders[uaKey];
+											await page.addInitScript((ua) => {
+												Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+											}, userAgent);
+										}
 									}
+
+									// Set realistic viewport
+									await page.setViewportSize({ width: 1920, height: 1080 });
+
 									if (Object.keys(cookiesObj).length > 0) {
 										const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
 											name,
@@ -333,7 +519,7 @@ export class CrawleeNode implements INodeType {
 							],
 							async requestHandler({ request, page, log }) {
 								log.debug(`Extracting text from ${request.url}`);
-								await page.waitForLoadState('domcontentloaded');
+								await page.waitForLoadState('networkidle');
 
 								const text = await page.evaluate(() => document.body.innerText.trim());
 								const title = await page.title();
@@ -361,8 +547,10 @@ export class CrawleeNode implements INodeType {
 							useSessionPool: false,
 							preNavigationHooks: [
 								async ({ request, log }) => {
-									if (Object.keys(jsonHeaders).length > 0) {
-										request.headers = { ...request.headers, ...jsonHeaders };
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										request.headers = { ...request.headers, ...saneHeaders };
 									}
 									if (Object.keys(cookiesObj).length > 0) {
 										const cookieString = Object.entries(cookiesObj)
@@ -399,6 +587,37 @@ export class CrawleeNode implements INodeType {
 				} else if (operation === 'extractHtml') {
 					const originalUrl = url;
 
+					// Helper to process headers and move 'cookie' to cookiesObj
+					const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
+						const processedHeaders = { ...headers };
+						const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
+						if (cookieKey) {
+							const rawCookie = processedHeaders[cookieKey];
+							const extractedCookies = rawCookie
+								.split(';')
+								.map((c) => c.trim())
+								.filter((c) => c)
+								.reduce((acc, curr) => {
+									const separatorIndex = curr.indexOf('=');
+									if (separatorIndex === -1) return acc;
+									const key = curr.slice(0, separatorIndex);
+									const value = curr.slice(separatorIndex + 1);
+									acc[key] = value;
+									return acc;
+								}, {} as Record<string, string>);
+							Object.assign(cookies, extractedCookies);
+							delete processedHeaders[cookieKey];
+						}
+
+						// Remove accept-encoding to let the browser/client handle decompression
+						const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
+						if (encodingKey) {
+							delete processedHeaders[encodingKey];
+						}
+
+						return processedHeaders;
+					};
+
 					if (useBrowser) {
 						const browserCrawler = new PlaywrightCrawler({
 							proxyConfiguration,
@@ -407,14 +626,29 @@ export class CrawleeNode implements INodeType {
 							headless: true,
 							preNavigationHooks: [
 								async ({ page }, gotoOptions) => {
-									if (Object.keys(jsonHeaders).length > 0) {
-										await page.setExtraHTTPHeaders(jsonHeaders);
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										await page.setExtraHTTPHeaders(saneHeaders);
+
+										// Sync navigator.userAgent with the User-Agent header if provided
+										const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+										if (uaKey) {
+											const userAgent = saneHeaders[uaKey];
+											await page.addInitScript((ua) => {
+												Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+											}, userAgent);
+										}
 									}
+
+									// Set realistic viewport
+									await page.setViewportSize({ width: 1920, height: 1080 });
+
 									if (Object.keys(cookiesObj).length > 0) {
 										const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
 											name,
 											value: value as string,
-											url: originalUrl,
+											url: originalUrl, // Cookies need a URL to be associated with
 										}));
 										await page.context().addCookies(cookies);
 									}
@@ -422,7 +656,7 @@ export class CrawleeNode implements INodeType {
 							],
 							async requestHandler({ request, page, log }) {
 								log.debug(`Extracting HTML from ${request.url}`);
-								await page.waitForLoadState('domcontentloaded');
+								await page.waitForLoadState('networkidle');
 
 								const html = await page.content();
 								const title = await page.title();

@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-crawl-and-scrape",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"description": "n8n custom node to crawl and scrape website",
 	"keywords": [
 		"n8n-community-node-package",
