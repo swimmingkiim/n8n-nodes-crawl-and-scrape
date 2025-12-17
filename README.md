@@ -41,15 +41,4 @@ This node is compatible with n8n version 1.0.0 and above.
 
 ## Version history
 
-### 0.1.0
-
-- Initial release
-- Added support for basic web scraping operations:
-  - Extract Links
-  - Extract Text
-  - Extract HTML
-
-### 0.1.2
-
-- Add proxy feature
-- Update crawlee version
+See CHANGELOG.md for details.
