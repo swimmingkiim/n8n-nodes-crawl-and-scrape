@@ -43,3 +43,8 @@
 ### Fixed
 - **Process Headers Logic**: Fixed a bug where `extractHtml` used with `Use Browser: Off` (Cheerio) was ignoring custom header processing logic (e.g. stripping `accept-encoding` and extracting cookies).
 - **Refactoring**: Centralized header processing logic to ensure consistent behavior across all operations and crawler types.
+
+## [0.3.2] - 2025-12-18
+
+### Fixed
+- **Anti-Bot Stealth**: Added advanced stealth configurations to `PlaywrightCrawler` (args and navigator overrides) to bypass detection on sites like AliExpress and other protected websites.

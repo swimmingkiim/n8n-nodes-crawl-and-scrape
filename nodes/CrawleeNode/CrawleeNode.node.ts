@@ -337,8 +337,17 @@ export class CrawleeNode implements INodeType {
 							requestHandlerTimeoutSecs: 60,
 							useSessionPool: false,
 							headless: true,
+							launchContext: {
+								launchOptions: {
+									args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+									ignoreDefaultArgs: ['--enable-automation'],
+								},
+							},
 							preNavigationHooks: [
 								async ({ page }, gotoOptions) => {
+									await page.addInitScript(() => {
+										Object.defineProperty(navigator, 'webdriver', { get: () => false });
+									});
 									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
 
 									if (Object.keys(saneHeaders).length > 0) {
@@ -459,8 +468,17 @@ export class CrawleeNode implements INodeType {
 							requestHandlerTimeoutSecs: 60,
 							useSessionPool: false,
 							headless: true,
+							launchContext: {
+								launchOptions: {
+									args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+									ignoreDefaultArgs: ['--enable-automation'],
+								},
+							},
 							preNavigationHooks: [
 								async ({ page }, gotoOptions) => {
+									await page.addInitScript(() => {
+										Object.defineProperty(navigator, 'webdriver', { get: () => false });
+									});
 									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
 
 									if (Object.keys(saneHeaders).length > 0) {
@@ -567,8 +585,17 @@ export class CrawleeNode implements INodeType {
 							requestHandlerTimeoutSecs: 60,
 							useSessionPool: false,
 							headless: true,
+							launchContext: {
+								launchOptions: {
+									args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+									ignoreDefaultArgs: ['--enable-automation'],
+								},
+							},
 							preNavigationHooks: [
 								async ({ page }, gotoOptions) => {
+									await page.addInitScript(() => {
+										Object.defineProperty(navigator, 'webdriver', { get: () => false });
+									});
 									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
 
 									if (Object.keys(saneHeaders).length > 0) {
