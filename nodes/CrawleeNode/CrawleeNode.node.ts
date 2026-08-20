@@ -139,6 +139,18 @@ export class CrawleeNode implements INodeType {
 						description: 'Extract raw HTML content from the page',
 						action: 'Extract raw HTML content from the page',
 					},
+					{
+						name: 'Extract Markdown',
+						value: 'extractMarkdown',
+						description: 'Extract content as Markdown',
+						action: 'Extract content as Markdown',
+					},
+					{
+						name: 'Extract Markdown & Screenshot',
+						value: 'extractMarkdownScreenshot',
+						description: 'Extract content as Markdown with a page screenshot',
+						action: 'Extract content as Markdown with a page screenshot',
+					},
 				],
 				default: 'extractLinks',
 			},
@@ -165,7 +177,7 @@ export class CrawleeNode implements INodeType {
 				},
 				displayOptions: {
 					show: {
-						operation: ['extractLinks', 'extractText', 'extractHtml'],
+						operation: ['extractLinks', 'extractText', 'extractHtml', 'extractMarkdown', 'extractMarkdownScreenshot'],
 					},
 				},
 				description:
@@ -176,6 +188,11 @@ export class CrawleeNode implements INodeType {
 				name: 'useBrowser',
 				type: 'boolean',
 				default: false,
+				displayOptions: {
+					hide: {
+						operation: ['extractMarkdownScreenshot'],
+					},
+				},
 				description: 'Whether to use a headless browser (Playwright) for crawling. Useful for sites that require JavaScript.',
 			},
 			{
