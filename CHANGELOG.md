@@ -48,3 +48,13 @@
 
 ### Fixed
 - **Anti-Bot Stealth**: Added advanced stealth configurations to `PlaywrightCrawler` (args and navigator overrides) to bypass detection on sites like AliExpress and other protected websites.
+
+## [0.4.0] - 2026-08-20
+
+### Added
+- **Extract Markdown**: New operation that converts page HTML to Markdown using Turndown with GFM support (tables, strikethrough). Works with both Cheerio and Playwright crawlers via the existing "Use Browser" toggle.
+- **Extract Markdown & Screenshot**: New operation that always uses Playwright to extract Markdown content and capture a full-page PNG screenshot as binary output.
+- **Test Infrastructure**: Added Vitest with 20 unit tests covering helper functions (header parsing, cookie parsing, URL timestamp appending, header processing).
+
+### Changed
+- Refactored internal helper functions (`parseRawHeaders`, `parseCookiesFromString`, `processHeaders`, `appendTimestampToUrl`) out of the execute method into exported module-level functions for testability.

@@ -1,3 +1,9 @@
+declare module 'turndown-plugin-gfm' {
+	export const gfm: TurndownPlugin;
+	export const tables: TurndownPlugin;
+	export const strikethrough: TurndownPlugin;
+}
+
 declare module 'cheerio' {
 	export function load(html: string): CheerioAPI;
 	export interface CheerioAPI {

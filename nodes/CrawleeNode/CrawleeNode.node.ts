@@ -7,10 +7,92 @@ import type {
 } from 'n8n-workflow';
 import { CheerioCrawler, PlaywrightCrawler, ProxyConfiguration } from 'crawlee';
 import * as cheerio from 'cheerio';
+import TurndownService from 'turndown';
+import { gfm } from 'turndown-plugin-gfm';
 
-function appendTimestampToUrl(url: string): string {
+export function appendTimestampToUrl(url: string): string {
 	const separator = url.includes('?') ? '&' : '?';
 	return `${url}${separator}_=${Date.now()}`;
+}
+
+export function parseRawHeaders(raw: string): Record<string, string> {
+	const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
+	const headers: Record<string, string> = {};
+
+	// Strategy 1: Check for "Key: Value" lines
+	const hasColons = lines.some(l => l.includes(':'));
+
+	if (hasColons) {
+		for (const line of lines) {
+			const separatorIndex = line.indexOf(':');
+			if (separatorIndex === -1) continue;
+
+			let key = line.slice(0, separatorIndex).trim();
+			const value = line.slice(separatorIndex + 1).trim();
+
+			// Clean Key: remove quotes, internal spaces check
+			key = key.replace(/['"]/g, '');
+
+			// Header keys cannot contain spaces
+			if (key.includes(' ')) continue;
+
+			// Skip protocol headers and empty keys
+			if (key.startsWith(':') || !key) continue;
+
+			headers[key] = value;
+		}
+	} else {
+		// Strategy 2: Alternating lines (Key \n Value)
+		for (let i = 0; i < lines.length; i += 2) {
+			if (i + 1 >= lines.length) break;
+
+			let key = lines[i].trim();
+			const value = lines[i + 1].trim();
+
+			// Clean Key
+			key = key.replace(/['"]/g, '');
+
+			// Validation
+			if (key.includes(' ') || key.startsWith(':') || !key) continue;
+
+			headers[key] = value;
+		}
+	}
+	return headers;
+}
+
+export function parseCookiesFromString(raw: string): Record<string, string> {
+	return raw
+		.split(';')
+		.map((c) => c.trim())
+		.filter((c) => c)
+		.reduce((acc, curr) => {
+			const separatorIndex = curr.indexOf('=');
+			if (separatorIndex === -1) return acc;
+			const key = curr.slice(0, separatorIndex);
+			const value = curr.slice(separatorIndex + 1);
+			acc[key] = value;
+			return acc;
+		}, {} as Record<string, string>);
+}
+
+export function processHeaders(headers: Record<string, string>, cookies: Record<string, string>): Record<string, string> {
+	const processedHeaders = { ...headers };
+	const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
+	if (cookieKey) {
+		const rawCookie = processedHeaders[cookieKey];
+		const extractedCookies = parseCookiesFromString(rawCookie);
+		Object.assign(cookies, extractedCookies);
+		delete processedHeaders[cookieKey];
+	}
+
+	// Remove accept-encoding to let the browser/client handle decompression
+	const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
+	if (encodingKey) {
+		delete processedHeaders[encodingKey];
+	}
+
+	return processedHeaders;
 }
 
 export class CrawleeNode implements INodeType {
@@ -59,6 +141,18 @@ export class CrawleeNode implements INodeType {
 						description: 'Extract raw HTML content from the page',
 						action: 'Extract raw HTML content from the page',
 					},
+					{
+						name: 'Extract Markdown',
+						value: 'extractMarkdown',
+						description: 'Extract content as Markdown',
+						action: 'Extract content as Markdown',
+					},
+					{
+						name: 'Extract Markdown & Screenshot',
+						value: 'extractMarkdownScreenshot',
+						description: 'Extract content as Markdown with a page screenshot',
+						action: 'Extract content as Markdown with a page screenshot',
+					},
 				],
 				default: 'extractLinks',
 			},
@@ -85,7 +179,7 @@ export class CrawleeNode implements INodeType {
 				},
 				displayOptions: {
 					show: {
-						operation: ['extractLinks', 'extractText', 'extractHtml'],
+						operation: ['extractLinks', 'extractText', 'extractHtml', 'extractMarkdown', 'extractMarkdownScreenshot'],
 					},
 				},
 				description:
@@ -96,6 +190,11 @@ export class CrawleeNode implements INodeType {
 				name: 'useBrowser',
 				type: 'boolean',
 				default: false,
+				displayOptions: {
+					hide: {
+						operation: ['extractMarkdownScreenshot'],
+					},
+				},
 				description: 'Whether to use a headless browser (Playwright) for crawling. Useful for sites that require JavaScript.',
 			},
 			{
@@ -203,53 +302,6 @@ export class CrawleeNode implements INodeType {
 				const headerInputType = this.getNodeParameter('headerInputType', itemIndex, 'json') as string;
 				let jsonHeaders: Record<string, string> = {};
 
-				const parseRawHeaders = (raw: string): Record<string, string> => {
-					const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
-					const headers: Record<string, string> = {};
-
-					// Strategy 1: Check for "Key: Value" lines
-					const hasColons = lines.some(l => l.includes(':'));
-
-					if (hasColons) {
-						for (const line of lines) {
-							const separatorIndex = line.indexOf(':');
-							if (separatorIndex === -1) continue;
-
-							let key = line.slice(0, separatorIndex).trim();
-							const value = line.slice(separatorIndex + 1).trim();
-
-							// Clean Key: remove quotes, internal spaces check
-							key = key.replace(/['"]/g, '');
-
-							// Header keys cannot contain spaces
-							if (key.includes(' ')) continue;
-
-							// Skip protocol headers and empty keys
-							if (key.startsWith(':') || !key) continue;
-
-							headers[key] = value;
-						}
-					} else {
-						// Strategy 2: Alternating lines (Key \n Value)
-						// This assumes even number of relevant lines or Key followed by Value
-						for (let i = 0; i < lines.length; i += 2) {
-							if (i + 1 >= lines.length) break;
-
-							let key = lines[i].trim();
-							const value = lines[i + 1].trim();
-
-							// Clean Key
-							key = key.replace(/['"]/g, '');
-
-							// Validation
-							if (key.includes(' ') || key.startsWith(':') || !key) continue;
-
-							headers[key] = value;
-						}
-					}
-					return headers;
-				};
-
 				if (headerInputType === 'json') {
 					jsonHeaders = this.getNodeParameter('jsonHeaders', itemIndex, {}) as Record<string, string>;
 				} else {
@@ -268,18 +320,7 @@ export class CrawleeNode implements INodeType {
 				} else {
 					const rawString = this.getNodeParameter('rawCookieString', itemIndex, '') as string;
 					if (rawString) {
-						cookiesObj = rawString
-							.split(';')
-							.map((c) => c.trim())
-							.filter((c) => c)
-							.reduce((acc, curr) => {
-								const separatorIndex = curr.indexOf('=');
-								if (separatorIndex === -1) return acc;
-								const key = curr.slice(0, separatorIndex);
-								const value = curr.slice(separatorIndex + 1);
-								acc[key] = value;
-								return acc;
-							}, {} as Record<string, string>);
+						cookiesObj = parseCookiesFromString(rawString);
 					}
 				}
 
@@ -292,36 +333,6 @@ export class CrawleeNode implements INodeType {
 				if (proxyUrls.length > 0) {
 					proxyConfiguration = new ProxyConfiguration({ proxyUrls });
 				}
-
-				const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
-					const processedHeaders = { ...headers };
-					const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
-					if (cookieKey) {
-						const rawCookie = processedHeaders[cookieKey];
-						const extractedCookies = rawCookie
-							.split(';')
-							.map((c) => c.trim())
-							.filter((c) => c)
-							.reduce((acc, curr) => {
-								const separatorIndex = curr.indexOf('=');
-								if (separatorIndex === -1) return acc;
-								const key = curr.slice(0, separatorIndex);
-								const value = curr.slice(separatorIndex + 1);
-								acc[key] = value;
-								return acc;
-							}, {} as Record<string, string>);
-						Object.assign(cookies, extractedCookies);
-						delete processedHeaders[cookieKey];
-					}
-
-					// Remove accept-encoding to let the browser/client handle decompression
-					const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
-					if (encodingKey) {
-						delete processedHeaders[encodingKey];
-					}
-
-					return processedHeaders;
-				};
 
 				if (operation === 'extractLinks') {
 					const crawledData: any[] = [];
@@ -690,6 +701,205 @@ export class CrawleeNode implements INodeType {
 
 						await crawler.run([appendTimestampToUrl(url)]);
 					}
+				} else if (operation === 'extractMarkdown') {
+					const originalUrl = url;
+					const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+					turndownService.use(gfm);
+
+					if (useBrowser) {
+						const browserCrawler = new PlaywrightCrawler({
+							proxyConfiguration,
+							requestHandlerTimeoutSecs: 60,
+							useSessionPool: false,
+							headless: true,
+							launchContext: {
+								launchOptions: {
+									args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+									ignoreDefaultArgs: ['--enable-automation'],
+								},
+							},
+							preNavigationHooks: [
+								async ({ page }, gotoOptions) => {
+									await page.addInitScript(() => {
+										Object.defineProperty(navigator, 'webdriver', { get: () => false });
+									});
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										await page.setExtraHTTPHeaders(saneHeaders);
+
+										const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+										if (uaKey) {
+											const userAgent = saneHeaders[uaKey];
+											await page.addInitScript((ua) => {
+												Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+											}, userAgent);
+										}
+									}
+
+									await page.setViewportSize({ width: 1920, height: 1080 });
+
+									if (Object.keys(cookiesObj).length > 0) {
+										const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
+											name,
+											value: value as string,
+											url: originalUrl,
+										}));
+										await page.context().addCookies(cookies);
+									}
+								},
+							],
+							async requestHandler({ request, page, log }) {
+								log.debug(`Extracting markdown from ${request.url}`);
+								await page.waitForLoadState('networkidle');
+
+								const html = await page.content();
+								const markdown = turndownService.turndown(html);
+								const title = await page.title();
+								const description = await page.$eval('meta[name="description"]', (el) => el.getAttribute('content')).catch(() => null);
+
+								returnData.push({
+									json: {
+										status: 'success',
+										message: 'Markdown extraction finished',
+										data: {
+											url: originalUrl,
+											markdown,
+											title,
+											description,
+										},
+									},
+								});
+							},
+						});
+						await browserCrawler.run([appendTimestampToUrl(url)]);
+					} else {
+						const crawler = new CheerioCrawler({
+							proxyConfiguration,
+							requestHandlerTimeoutSecs: 30,
+							useSessionPool: false,
+							preNavigationHooks: [
+								async ({ request, log }) => {
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										request.headers = { ...request.headers, ...saneHeaders };
+									}
+									if (Object.keys(cookiesObj).length > 0) {
+										const cookieString = Object.entries(cookiesObj)
+											.map(([key, value]) => `${key}=${value}`)
+											.join('; ');
+										request.headers = { ...request.headers, Cookie: cookieString };
+									}
+								},
+							],
+							async requestHandler({ request, body, log }) {
+								log.debug(`Extracting markdown from ${request.url}`);
+								const html = body.toString();
+								const markdown = turndownService.turndown(html);
+								const $ = cheerio.load(html);
+								const title = $('title').text() || null;
+								const description = $('meta[name="description"]').attr('content') || null;
+
+								returnData.push({
+									json: {
+										status: 'success',
+										message: 'Markdown extraction finished',
+										data: {
+											url: originalUrl,
+											markdown,
+											title,
+											description,
+										},
+									},
+								});
+							},
+						});
+
+						await crawler.run([appendTimestampToUrl(url)]);
+					}
+				} else if (operation === 'extractMarkdownScreenshot') {
+					const originalUrl = url;
+					const executeContext = this;
+					const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+					turndownService.use(gfm);
+
+					const browserCrawler = new PlaywrightCrawler({
+						proxyConfiguration,
+						requestHandlerTimeoutSecs: 60,
+						useSessionPool: false,
+						headless: true,
+						launchContext: {
+							launchOptions: {
+								args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+								ignoreDefaultArgs: ['--enable-automation'],
+							},
+						},
+						preNavigationHooks: [
+							async ({ page }, gotoOptions) => {
+								await page.addInitScript(() => {
+									Object.defineProperty(navigator, 'webdriver', { get: () => false });
+								});
+								const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+								if (Object.keys(saneHeaders).length > 0) {
+									await page.setExtraHTTPHeaders(saneHeaders);
+
+									const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+									if (uaKey) {
+										const userAgent = saneHeaders[uaKey];
+										await page.addInitScript((ua) => {
+											Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+										}, userAgent);
+									}
+								}
+
+								await page.setViewportSize({ width: 1920, height: 1080 });
+
+								if (Object.keys(cookiesObj).length > 0) {
+									const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
+										name,
+										value: value as string,
+										url: originalUrl,
+									}));
+									await page.context().addCookies(cookies);
+								}
+							},
+						],
+						async requestHandler({ request, page, log }) {
+							log.debug(`Extracting markdown and screenshot from ${request.url}`);
+							await page.waitForLoadState('networkidle');
+
+							const html = await page.content();
+							const markdown = turndownService.turndown(html);
+							const title = await page.title();
+							const description = await page.$eval('meta[name="description"]', (el) => el.getAttribute('content')).catch(() => null);
+
+							const screenshotBuffer = await page.screenshot({ type: 'png', fullPage: true });
+							const screenshotBinary = await executeContext.helpers.prepareBinaryData(
+								Buffer.from(screenshotBuffer),
+								'screenshot.png',
+								'image/png',
+							);
+
+							returnData.push({
+								json: {
+									status: 'success',
+									message: 'Markdown and screenshot extraction finished',
+									data: {
+										url: originalUrl,
+										markdown,
+										title,
+										description,
+									},
+								},
+								binary: {
+									screenshot: screenshotBinary,
+								},
+							});
+						},
+					});
+					await browserCrawler.run([appendTimestampToUrl(url)]);
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
