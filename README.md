@@ -25,6 +25,8 @@ The node supports the following operations:
 - **Extract Links**: Crawls a website and extracts all links found on the page
 - **Extract Text**: Extracts all text content from a webpage
 - **Extract HTML**: Retrieves the raw HTML content of a webpage
+- **Extract Markdown**: Converts page content to Markdown (supports GFM tables and strikethrough)
+- **Extract Markdown & Screenshot**: Extracts Markdown content along with a full-page PNG screenshot
 
 ## Credentials
 
