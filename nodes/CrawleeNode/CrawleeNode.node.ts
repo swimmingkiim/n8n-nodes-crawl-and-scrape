@@ -8,9 +8,89 @@ import type {
 import { CheerioCrawler, PlaywrightCrawler, ProxyConfiguration } from 'crawlee';
 import * as cheerio from 'cheerio';
 
-function appendTimestampToUrl(url: string): string {
+export function appendTimestampToUrl(url: string): string {
 	const separator = url.includes('?') ? '&' : '?';
 	return `${url}${separator}_=${Date.now()}`;
+}
+
+export function parseRawHeaders(raw: string): Record<string, string> {
+	const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
+	const headers: Record<string, string> = {};
+
+	// Strategy 1: Check for "Key: Value" lines
+	const hasColons = lines.some(l => l.includes(':'));
+
+	if (hasColons) {
+		for (const line of lines) {
+			const separatorIndex = line.indexOf(':');
+			if (separatorIndex === -1) continue;
+
+			let key = line.slice(0, separatorIndex).trim();
+			const value = line.slice(separatorIndex + 1).trim();
+
+			// Clean Key: remove quotes, internal spaces check
+			key = key.replace(/['"]/g, '');
+
+			// Header keys cannot contain spaces
+			if (key.includes(' ')) continue;
+
+			// Skip protocol headers and empty keys
+			if (key.startsWith(':') || !key) continue;
+
+			headers[key] = value;
+		}
+	} else {
+		// Strategy 2: Alternating lines (Key \n Value)
+		for (let i = 0; i < lines.length; i += 2) {
+			if (i + 1 >= lines.length) break;
+
+			let key = lines[i].trim();
+			const value = lines[i + 1].trim();
+
+			// Clean Key
+			key = key.replace(/['"]/g, '');
+
+			// Validation
+			if (key.includes(' ') || key.startsWith(':') || !key) continue;
+
+			headers[key] = value;
+		}
+	}
+	return headers;
+}
+
+export function parseCookiesFromString(raw: string): Record<string, string> {
+	return raw
+		.split(';')
+		.map((c) => c.trim())
+		.filter((c) => c)
+		.reduce((acc, curr) => {
+			const separatorIndex = curr.indexOf('=');
+			if (separatorIndex === -1) return acc;
+			const key = curr.slice(0, separatorIndex);
+			const value = curr.slice(separatorIndex + 1);
+			acc[key] = value;
+			return acc;
+		}, {} as Record<string, string>);
+}
+
+export function processHeaders(headers: Record<string, string>, cookies: Record<string, string>): Record<string, string> {
+	const processedHeaders = { ...headers };
+	const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
+	if (cookieKey) {
+		const rawCookie = processedHeaders[cookieKey];
+		const extractedCookies = parseCookiesFromString(rawCookie);
+		Object.assign(cookies, extractedCookies);
+		delete processedHeaders[cookieKey];
+	}
+
+	// Remove accept-encoding to let the browser/client handle decompression
+	const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
+	if (encodingKey) {
+		delete processedHeaders[encodingKey];
+	}
+
+	return processedHeaders;
 }
 
 export class CrawleeNode implements INodeType {
@@ -203,53 +283,6 @@ export class CrawleeNode implements INodeType {
 				const headerInputType = this.getNodeParameter('headerInputType', itemIndex, 'json') as string;
 				let jsonHeaders: Record<string, string> = {};
 
-				const parseRawHeaders = (raw: string): Record<string, string> => {
-					const lines = raw.split('\n').map(l => l.trim()).filter(l => l);
-					const headers: Record<string, string> = {};
-
-					// Strategy 1: Check for "Key: Value" lines
-					const hasColons = lines.some(l => l.includes(':'));
-
-					if (hasColons) {
-						for (const line of lines) {
-							const separatorIndex = line.indexOf(':');
-							if (separatorIndex === -1) continue;
-
-							let key = line.slice(0, separatorIndex).trim();
-							const value = line.slice(separatorIndex + 1).trim();
-
-							// Clean Key: remove quotes, internal spaces check
-							key = key.replace(/['"]/g, '');
-
-							// Header keys cannot contain spaces
-							if (key.includes(' ')) continue;
-
-							// Skip protocol headers and empty keys
-							if (key.startsWith(':') || !key) continue;
-
-							headers[key] = value;
-						}
-					} else {
-						// Strategy 2: Alternating lines (Key \n Value)
-						// This assumes even number of relevant lines or Key followed by Value
-						for (let i = 0; i < lines.length; i += 2) {
-							if (i + 1 >= lines.length) break;
-
-							let key = lines[i].trim();
-							const value = lines[i + 1].trim();
-
-							// Clean Key
-							key = key.replace(/['"]/g, '');
-
-							// Validation
-							if (key.includes(' ') || key.startsWith(':') || !key) continue;
-
-							headers[key] = value;
-						}
-					}
-					return headers;
-				};
-
 				if (headerInputType === 'json') {
 					jsonHeaders = this.getNodeParameter('jsonHeaders', itemIndex, {}) as Record<string, string>;
 				} else {
@@ -268,18 +301,7 @@ export class CrawleeNode implements INodeType {
 				} else {
 					const rawString = this.getNodeParameter('rawCookieString', itemIndex, '') as string;
 					if (rawString) {
-						cookiesObj = rawString
-							.split(';')
-							.map((c) => c.trim())
-							.filter((c) => c)
-							.reduce((acc, curr) => {
-								const separatorIndex = curr.indexOf('=');
-								if (separatorIndex === -1) return acc;
-								const key = curr.slice(0, separatorIndex);
-								const value = curr.slice(separatorIndex + 1);
-								acc[key] = value;
-								return acc;
-							}, {} as Record<string, string>);
+						cookiesObj = parseCookiesFromString(rawString);
 					}
 				}
 
@@ -292,36 +314,6 @@ export class CrawleeNode implements INodeType {
 				if (proxyUrls.length > 0) {
 					proxyConfiguration = new ProxyConfiguration({ proxyUrls });
 				}
-
-				const processHeaders = (headers: Record<string, string>, cookies: Record<string, string>) => {
-					const processedHeaders = { ...headers };
-					const cookieKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'cookie');
-					if (cookieKey) {
-						const rawCookie = processedHeaders[cookieKey];
-						const extractedCookies = rawCookie
-							.split(';')
-							.map((c) => c.trim())
-							.filter((c) => c)
-							.reduce((acc, curr) => {
-								const separatorIndex = curr.indexOf('=');
-								if (separatorIndex === -1) return acc;
-								const key = curr.slice(0, separatorIndex);
-								const value = curr.slice(separatorIndex + 1);
-								acc[key] = value;
-								return acc;
-							}, {} as Record<string, string>);
-						Object.assign(cookies, extractedCookies);
-						delete processedHeaders[cookieKey];
-					}
-
-					// Remove accept-encoding to let the browser/client handle decompression
-					const encodingKey = Object.keys(processedHeaders).find((k) => k.toLowerCase() === 'accept-encoding');
-					if (encodingKey) {
-						delete processedHeaders[encodingKey];
-					}
-
-					return processedHeaders;
-				};
 
 				if (operation === 'extractLinks') {
 					const crawledData: any[] = [];
