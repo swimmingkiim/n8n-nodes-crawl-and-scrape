@@ -7,6 +7,8 @@ import type {
 } from 'n8n-workflow';
 import { CheerioCrawler, PlaywrightCrawler, ProxyConfiguration } from 'crawlee';
 import * as cheerio from 'cheerio';
+import TurndownService from 'turndown';
+import { gfm } from 'turndown-plugin-gfm';
 
 export function appendTimestampToUrl(url: string): string {
 	const separator = url.includes('?') ? '&' : '?';
@@ -691,6 +693,123 @@ export class CrawleeNode implements INodeType {
 											html: body,
 											title: title,
 											description: description,
+										},
+									},
+								});
+							},
+						});
+
+						await crawler.run([appendTimestampToUrl(url)]);
+					}
+				} else if (operation === 'extractMarkdown') {
+					const originalUrl = url;
+					const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+					turndownService.use(gfm);
+
+					if (useBrowser) {
+						const browserCrawler = new PlaywrightCrawler({
+							proxyConfiguration,
+							requestHandlerTimeoutSecs: 60,
+							useSessionPool: false,
+							headless: true,
+							launchContext: {
+								launchOptions: {
+									args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+									ignoreDefaultArgs: ['--enable-automation'],
+								},
+							},
+							preNavigationHooks: [
+								async ({ page }, gotoOptions) => {
+									await page.addInitScript(() => {
+										Object.defineProperty(navigator, 'webdriver', { get: () => false });
+									});
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										await page.setExtraHTTPHeaders(saneHeaders);
+
+										const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+										if (uaKey) {
+											const userAgent = saneHeaders[uaKey];
+											await page.addInitScript((ua) => {
+												Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+											}, userAgent);
+										}
+									}
+
+									await page.setViewportSize({ width: 1920, height: 1080 });
+
+									if (Object.keys(cookiesObj).length > 0) {
+										const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
+											name,
+											value: value as string,
+											url: originalUrl,
+										}));
+										await page.context().addCookies(cookies);
+									}
+								},
+							],
+							async requestHandler({ request, page, log }) {
+								log.debug(`Extracting markdown from ${request.url}`);
+								await page.waitForLoadState('networkidle');
+
+								const html = await page.content();
+								const markdown = turndownService.turndown(html);
+								const title = await page.title();
+								const description = await page.$eval('meta[name="description"]', (el) => el.getAttribute('content')).catch(() => null);
+
+								returnData.push({
+									json: {
+										status: 'success',
+										message: 'Markdown extraction finished',
+										data: {
+											url: originalUrl,
+											markdown,
+											title,
+											description,
+										},
+									},
+								});
+							},
+						});
+						await browserCrawler.run([appendTimestampToUrl(url)]);
+					} else {
+						const crawler = new CheerioCrawler({
+							proxyConfiguration,
+							requestHandlerTimeoutSecs: 30,
+							useSessionPool: false,
+							preNavigationHooks: [
+								async ({ request, log }) => {
+									const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+									if (Object.keys(saneHeaders).length > 0) {
+										request.headers = { ...request.headers, ...saneHeaders };
+									}
+									if (Object.keys(cookiesObj).length > 0) {
+										const cookieString = Object.entries(cookiesObj)
+											.map(([key, value]) => `${key}=${value}`)
+											.join('; ');
+										request.headers = { ...request.headers, Cookie: cookieString };
+									}
+								},
+							],
+							async requestHandler({ request, body, log }) {
+								log.debug(`Extracting markdown from ${request.url}`);
+								const html = body.toString();
+								const markdown = turndownService.turndown(html);
+								const $ = cheerio.load(html);
+								const title = $('title').text() || null;
+								const description = $('meta[name="description"]').attr('content') || null;
+
+								returnData.push({
+									json: {
+										status: 'success',
+										message: 'Markdown extraction finished',
+										data: {
+											url: originalUrl,
+											markdown,
+											title,
+											description,
 										},
 									},
 								});
