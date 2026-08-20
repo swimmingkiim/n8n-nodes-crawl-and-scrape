@@ -818,6 +818,88 @@ export class CrawleeNode implements INodeType {
 
 						await crawler.run([appendTimestampToUrl(url)]);
 					}
+				} else if (operation === 'extractMarkdownScreenshot') {
+					const originalUrl = url;
+					const executeContext = this;
+					const turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+					turndownService.use(gfm);
+
+					const browserCrawler = new PlaywrightCrawler({
+						proxyConfiguration,
+						requestHandlerTimeoutSecs: 60,
+						useSessionPool: false,
+						headless: true,
+						launchContext: {
+							launchOptions: {
+								args: ['--disable-blink-features=AutomationControlled', '--no-sandbox', '--disable-setuid-sandbox'],
+								ignoreDefaultArgs: ['--enable-automation'],
+							},
+						},
+						preNavigationHooks: [
+							async ({ page }, gotoOptions) => {
+								await page.addInitScript(() => {
+									Object.defineProperty(navigator, 'webdriver', { get: () => false });
+								});
+								const saneHeaders = processHeaders(jsonHeaders, cookiesObj);
+
+								if (Object.keys(saneHeaders).length > 0) {
+									await page.setExtraHTTPHeaders(saneHeaders);
+
+									const uaKey = Object.keys(saneHeaders).find((k) => k.toLowerCase() === 'user-agent');
+									if (uaKey) {
+										const userAgent = saneHeaders[uaKey];
+										await page.addInitScript((ua) => {
+											Object.defineProperty(navigator, 'userAgent', { get: () => ua });
+										}, userAgent);
+									}
+								}
+
+								await page.setViewportSize({ width: 1920, height: 1080 });
+
+								if (Object.keys(cookiesObj).length > 0) {
+									const cookies = Object.entries(cookiesObj).map(([name, value]) => ({
+										name,
+										value: value as string,
+										url: originalUrl,
+									}));
+									await page.context().addCookies(cookies);
+								}
+							},
+						],
+						async requestHandler({ request, page, log }) {
+							log.debug(`Extracting markdown and screenshot from ${request.url}`);
+							await page.waitForLoadState('networkidle');
+
+							const html = await page.content();
+							const markdown = turndownService.turndown(html);
+							const title = await page.title();
+							const description = await page.$eval('meta[name="description"]', (el) => el.getAttribute('content')).catch(() => null);
+
+							const screenshotBuffer = await page.screenshot({ type: 'png', fullPage: true });
+							const screenshotBinary = await executeContext.helpers.prepareBinaryData(
+								Buffer.from(screenshotBuffer),
+								'screenshot.png',
+								'image/png',
+							);
+
+							returnData.push({
+								json: {
+									status: 'success',
+									message: 'Markdown and screenshot extraction finished',
+									data: {
+										url: originalUrl,
+										markdown,
+										title,
+										description,
+									},
+								},
+								binary: {
+									screenshot: screenshotBinary,
+								},
+							});
+						},
+					});
+					await browserCrawler.run([appendTimestampToUrl(url)]);
 				}
 			} catch (error) {
 				if (this.continueOnFail()) {
